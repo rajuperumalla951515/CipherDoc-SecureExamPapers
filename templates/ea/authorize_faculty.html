@@ -137,6 +137,7 @@
                                         <button type="submit" class="btn btn-sm btn-primary">
                                             <i class="fas fa-check me-1"></i>Save Authorization
                                         </button>
+                                </form>
                                         {% if faculty.is_authorized %}
                                         <form method="POST" action="{{ url_for('ea.authorize_faculty') }}" class="d-inline">
                                             <input type="hidden" name="action" value="revoke">
@@ -147,7 +148,6 @@
                                         </form>
                                         {% endif %}
                                     </div>
-                                </form>
                             </div>
                         </div>
                     </div>

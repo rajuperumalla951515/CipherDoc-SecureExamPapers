@@ -32,32 +32,30 @@
 {% block content %}
 <div class="container-fluid">
     <div class="row">
-        <div class="col-lg-2 px-0">
-            <div class="sidebar py-4">
-                <nav class="nav flex-column">
-                    <a class="nav-link" href="{{ url_for('ea.dashboard') }}">
-                        <i class="fas fa-tachometer-alt"></i>Dashboard
-                    </a>
-                    <a class="nav-link" href="{{ url_for('ea.create_paper') }}">
-                        <i class="fas fa-file-alt"></i>Create Paper
-                    </a>
-                    <a class="nav-link active" href="{{ url_for('ea.manage_papers') }}">
-                        <i class="fas fa-folder-open"></i>Manage Papers
-                    </a>
-                    <a class="nav-link" href="{{ url_for('ea.manage_keys') }}">
-                        <i class="fas fa-key"></i>RSA Keys
-                    </a>
-                    <a class="nav-link" href="{{ url_for('ea.authorize_faculty') }}">
-                        <i class="fas fa-user-check"></i>Authorize Faculty
-                    </a>
-                    <a class="nav-link" href="{{ url_for('ea.access_logs') }}">
-                        <i class="fas fa-history"></i>Access Logs
-                    </a>
-                </nav>
-            </div>
+        <div class="sidebar py-4">
+            <nav class="nav flex-column">
+                <a class="nav-link" href="{{ url_for('ea.dashboard') }}">
+                    <i class="fas fa-tachometer-alt"></i><span class="nav-text">Dashboard</span>
+                </a>
+                <a class="nav-link" href="{{ url_for('ea.create_paper') }}">
+                    <i class="fas fa-file-alt"></i><span class="nav-text">Create Paper</span>
+                </a>
+                <a class="nav-link active" href="{{ url_for('ea.manage_papers') }}">
+                    <i class="fas fa-folder-open"></i><span class="nav-text">Manage Papers</span>
+                </a>
+                <a class="nav-link" href="{{ url_for('ea.manage_keys') }}">
+                    <i class="fas fa-key"></i><span class="nav-text">RSA Keys</span>
+                </a>
+                <a class="nav-link" href="{{ url_for('ea.authorize_faculty') }}">
+                    <i class="fas fa-user-check"></i><span class="nav-text">Authorize Faculty</span>
+                </a>
+                <a class="nav-link" href="{{ url_for('ea.access_logs') }}">
+                    <i class="fas fa-history"></i><span class="nav-text">Access Logs</span>
+                </a>
+            </nav>
         </div>
         
-        <div class="col-lg-10 py-4 px-4">
+        <div class="main-content-wrapper fade-in">
             <div class="d-flex align-items-center mb-4">
                 <div class="icon-circle primary me-3">
                     <i class="fas fa-edit"></i>
@@ -70,7 +68,7 @@
             
             <div class="card p-4">
                 <form method="POST" action="{{ url_for('ea.edit_paper', paper_id=paper.id) }}">
-                    <div class="row g-4">
+                    <div class="row g-2">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">
                                 <i class="fas fa-bookmark me-2 text-primary"></i>Exam Name <span class="text-primary">*</span>
@@ -119,10 +117,22 @@
                                 <i class="fas fa-question-circle me-2 text-primary"></i>Question Paper Content <span class="text-primary">*</span>
                             </label>
                             <textarea id="questions-editor" name="questions" class="form-control" rows="12" placeholder="Enter updated questions...">{{ paper.get('decrypted_questions', 'Previously encrypted - enter new questions') }}</textarea>
-                            <small class="text-muted">You can format questions with bold, italic, underline, bullet list, and numbered list. The full questions will be re-encrypted with the active RSA key.</small>
+                            <small class="text-muted">You can format questions with bold, italic, underline, bullet list, and numbered list.</small>
+                        </div>
+
+                        <div class="col-12 mt-3">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-key me-2 text-primary"></i>Assign RSA Key <span class="text-primary">*</span>
+                            </label>
+                            <select name="key_id" class="form-select" required>
+                                {% for key in keys %}
+                                <option value="{{ key.id }}" {% if key.id == paper.key_id %}selected{% endif %}>{{ key.key_name }} {% if key.is_active %}(Active){% else %}(Inactive){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Select the key to use for re-encrypting the updated content.</small>
                         </div>
                         
-                        <div class="col-12">
+                        <div class="col-12 mt-3">
                             <div class="alert alert-warning py-3">
                                 <div class="d-flex align-items-center">
                                     <div class="icon-circle primary me-3" style="width: 40px; height: 40px; font-size: 16px;">
@@ -130,7 +140,7 @@
                                     </div>
                                     <div>
                                         <p class="mb-0 fw-semibold">Re-encryption Notice</p>
-                                        <p class="mb-0 small text-muted">The updated content will be re-encrypted using the currently active RSA key.</p>
+                                        <p class="mb-0 small text-muted">The updated content will be re-encrypted using the selected RSA key.</p>
                                     </div>
                                 </div>
                             </div>
@@ -199,7 +209,7 @@
                     alert('Please enter both Instructions and Questions before updating the paper.');
                 }
             });
-        });
+        }
     });
 </script>
 {% endblock %}

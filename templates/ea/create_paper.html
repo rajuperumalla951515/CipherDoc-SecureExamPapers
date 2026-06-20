@@ -69,7 +69,7 @@
 
             <div class="card p-4">
                 <form method="POST" action="{{ url_for('ea.create_paper') }}">
-                    <div class="row g-4">
+                    <div class="row g-2">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">
                                 <i class="fas fa-bookmark me-2 text-primary"></i>Exam Name <span
@@ -132,7 +132,19 @@
                             <small class="text-muted">You can format questions with bold, italic, underline, bullet list, and numbered list.</small>
                         </div>
 
-                        <div class="col-12">
+                        <div class="col-12 mt-3">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-key me-2 text-primary"></i>Assign RSA Key <span class="text-primary">*</span>
+                            </label>
+                            <select name="key_id" class="form-select" required>
+                                <option value="" disabled selected>Select an RSA key for encryption...</option>
+                                {% for key in keys %}
+                                <option value="{{ key.id }}">{{ key.key_name }} {% if key.is_active %}(Active){% else %}(Inactive){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-12 mt-3">
                             <div class="alert alert-info py-3">
                                 <div class="d-flex align-items-center">
                                     <div class="icon-circle primary me-3"
@@ -142,7 +154,7 @@
                                     <div>
                                         <p class="mb-0 fw-semibold">RSA Encryption</p>
                                         <p class="mb-0 small text-muted">This question paper will be encrypted using
-                                            RSA-2048 bit encryption with the active key before storage.</p>
+                                            RSA-2048 bit encryption with the selected key before storage.</p>
                                     </div>
                                 </div>
                             </div>

@@ -68,18 +68,21 @@ def create_paper():
     _, papers_table, keys_table, _, _ = get_db()
     Key = Query()
     
+    keys = keys_table.all()
+    
     if request.method == 'POST':
-        keys = keys_table.all()
         if not keys:
             flash('Please generate RSA keys first before creating encrypted papers!', 'error')
             return redirect(url_for('ea.manage_keys'))
         
-        active_key = keys_table.search(Key.is_active == True)
-        if not active_key:
-            flash('No active RSA key found. Please generate or activate a key.', 'error')
-            return redirect(url_for('ea.manage_keys'))
+        selected_key_id = request.form.get('key_id')
+        selected_key = keys_table.search(Key.id == selected_key_id)
         
-        public_key = active_key[0]['public_key']
+        if not selected_key:
+            flash('Selected RSA key not found. Please choose a valid key.', 'error')
+            return redirect(url_for('ea.create_paper'))
+        
+        public_key = selected_key[0]['public_key']
         
         exam_name = request.form.get('exam_name')
         subject = request.form.get('subject')
@@ -107,7 +110,7 @@ def create_paper():
             'encrypted_key': encrypted_key,
             'encrypted_instructions': encrypted_instructions,
             'instructions_key': instr_key,
-            'key_id': active_key[0]['id'],
+            'key_id': selected_key[0]['id'],
             'created_by': session['user_id'],
             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'status': 'encrypted',
@@ -119,7 +122,7 @@ def create_paper():
         flash('Question paper created and encrypted successfully!', 'success')
         return redirect(url_for('ea.manage_papers'))
     
-    return render_template('ea/create_paper.html')
+    return render_template('ea/create_paper.html', keys=keys)
 
 
 @bp.route('/manage-papers')
@@ -143,14 +146,27 @@ def edit_paper(paper_id):
         return redirect(url_for('ea.manage_papers'))
     
     paper = paper[0]
+    keys = keys_table.all()
     
+    # Decrypt content for GET request
+    if request.method == 'GET':
+        paper_key = keys_table.search(Key.id == paper['key_id'])
+        if paper_key:
+            private_key = paper_key[0]['private_key']
+            try:
+                paper['decrypted_questions'] = decrypt_text(paper['encrypted_questions'], paper['encrypted_key'], private_key)
+                paper['decrypted_instructions'] = decrypt_text(paper['encrypted_instructions'], paper['instructions_key'], private_key)
+            except Exception as e:
+                flash(f'Failed to decrypt paper content. Error: {e}', 'warning')
+
     if request.method == 'POST':
-        active_key = keys_table.search(Key.is_active == True)
-        if not active_key:
-            flash('No active RSA key found.', 'error')
-            return redirect(url_for('ea.manage_keys'))
+        selected_key_id = request.form.get('key_id')
+        selected_key = keys_table.search(Key.id == selected_key_id)
+        if not selected_key:
+            flash('Selected RSA key not found.', 'error')
+            return redirect(url_for('ea.edit_paper', paper_id=paper_id))
         
-        public_key = active_key[0]['public_key']
+        public_key = selected_key[0]['public_key']
         questions = request.form.get('questions')
         instructions = request.form.get('instructions')
 
@@ -171,7 +187,7 @@ def edit_paper(paper_id):
             'encrypted_key': encrypted_key,
             'encrypted_instructions': encrypted_instructions,
             'instructions_key': instr_key,
-            'key_id': active_key[0]['id'],
+            'key_id': selected_key[0]['id'],
             'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }, Paper.id == paper_id)
         
@@ -179,7 +195,7 @@ def edit_paper(paper_id):
         flash('Paper updated successfully!', 'success')
         return redirect(url_for('ea.manage_papers'))
     
-    return render_template('ea/edit_paper.html', paper=paper)
+    return render_template('ea/edit_paper.html', paper=paper, keys=keys)
 
 
 @bp.route('/delete-paper/<paper_id>')

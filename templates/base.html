@@ -1139,20 +1139,24 @@
     {% block navbar %}{% endblock %}
 
     <div class="container-fluid">
+    </div>
+
+    <!-- Toast Container for Flash Messages -->
+    <div class="toast-container">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-        <div class="row justify-content-center mt-3">
-            <div class="col-md-8">
-                {% for category, message in messages %}
-                <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show"
-                    role="alert">
-                    <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-circle' }} me-2"></i>
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            {% for category, message in messages %}
+            <div class="toast align-items-center text-white border-0 py-2 mb-2 alert-{{ 'success' if category == 'success' else 'danger' }}" 
+                 role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="4000" data-bs-autohide="true">
+                <div class="d-flex">
+                    <div class="toast-body d-flex align-items-center">
+                        <i class="fas fa-{{ 'check-circle' if category == 'success' else 'exclamation-circle' }} me-2 fs-5"></i>
+                        <span class="fw-medium">{{ message }}</span>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-3 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
                 </div>
-                {% endfor %}
             </div>
-        </div>
+            {% endfor %}
         {% endif %}
         {% endwith %}
     </div>
@@ -1396,6 +1400,16 @@
             if (isCollapsed) {
                 document.querySelector('.sidebar').classList.add('collapsed');
             }
+            
+            // Initialize toasts
+            const toastElList = [].slice.call(document.querySelectorAll('.toast'));
+            const toastList = toastElList.map(function(toastEl) {
+                return new bootstrap.Toast(toastEl, {
+                    autohide: true,
+                    delay: 4000
+                });
+            });
+            toastList.forEach(toast => toast.show());
         });
 
         // Ask confirmation before logout on all pages.
