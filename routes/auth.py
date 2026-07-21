@@ -1,6 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
-from tinydb import Query
 from datetime import datetime
 import uuid
 import random
@@ -9,12 +8,13 @@ import string
 bp = Blueprint('auth', __name__)
 
 def get_db():
-    from app import users_table, logs_table
-    return users_table, logs_table
+    from app import supabase
+    return supabase
 
 
-def generate_user_id(users_table, field_name, prefix):
-    existing_ids = [user.get(field_name) for user in users_table.all() if user.get(field_name)]
+def generate_user_id(supabase, table_name, field_name, prefix):
+    res = supabase.table(table_name).select(field_name).execute()
+    existing_ids = [row.get(field_name) for row in res.data if row.get(field_name)]
     max_number = 0
     for uid in existing_ids:
         if isinstance(uid, str) and uid.upper().startswith(prefix):
@@ -26,23 +26,22 @@ def generate_user_id(users_table, field_name, prefix):
     return f"{prefix}{max_number + 1:03d}"
 
 
-def generate_employee_id(users_table):
-    return generate_user_id(users_table, 'employee_id', 'EMP')
+def generate_employee_id(supabase):
+    return generate_user_id(supabase, 'users', 'employee_id', 'EMP')
 
 
-def generate_faculty_id(users_table):
-    return generate_user_id(users_table, 'faculty_id', 'FAC')
+def generate_faculty_id(supabase):
+    return generate_user_id(supabase, 'users', 'faculty_id', 'FAC')
 
-def log_activity(user_id, user_type, action, details=""):
-    _, logs_table = get_db()
-    logs_table.insert({
+def log_activity(supabase, user_id, user_type, action, details=""):
+    supabase.table('access_logs').insert({
         'id': str(uuid.uuid4()),
         'user_id': user_id,
         'user_type': user_type,
         'action': action,
         'details': details,
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
+    }).execute()
 
 
 @bp.route('/home')
@@ -56,33 +55,30 @@ def generate_otp():
     if not email:
         return {"success": False, "message": "Email is required"}, 400
     
-    users_table, _ = get_db()
-    User = Query()
-    if users_table.search(User.email == email):
+    supabase = get_db()
+    res = supabase.table('users').select('id').eq('email', email).execute()
+    if res.data:
         return {"success": False, "message": "Already registered with this mail, try with another mail"}, 400
     
     otp = ''.join(random.choices(string.digits, k=6))
     session['registration_otp'] = otp
-    # Return the OTP so the frontend can send it via EmailJS
     return {"success": True, "otp": otp}
 
 
 @bp.route('/ea/signup', methods=['GET', 'POST'])
 def ea_signup():
     if request.method == 'POST':
-        users_table, _ = get_db()
-        User = Query()
+        supabase = get_db()
         
         email = request.form.get('email', '').strip().lower()
-        employee_id = generate_employee_id(users_table)
-        while users_table.search(User.employee_id == employee_id):
-            employee_id = generate_employee_id(users_table)
+        employee_id = generate_employee_id(supabase)
         
         if not email.endswith('@gmail.com'):
             flash('Only Gmail addresses (@gmail.com) are allowed for registration!', 'error')
             return redirect(url_for('auth.ea_signup'))
-            
-        if users_table.search(User.email.matches(f"(?i)^{email}$")):
+        
+        existing = supabase.table('users').select('id').ilike('email', email).execute()
+        if existing.data:
             flash('Email already exists!', 'error')
             return redirect(url_for('auth.ea_signup'))
         
@@ -108,34 +104,34 @@ def ea_signup():
             'is_active': True
         }
         
-        users_table.insert(user_data)
+        supabase.table('users').insert(user_data).execute()
         session.pop('registration_otp', None)
-        log_activity(user_data['id'], 'EA', 'SIGNUP', f"New EA registered: {email}")
+        log_activity(supabase, user_data['id'], 'EA', 'SIGNUP', f"New EA registered: {email}")
         flash('Registration successful! Please login.', 'success')
         return redirect(url_for('auth.ea_login'))
     
-    users_table, _ = get_db()
-    employee_id = generate_employee_id(users_table)
+    supabase = get_db()
+    employee_id = generate_employee_id(supabase)
     return render_template('ea_signup.html', employee_id=employee_id)
 
 
 @bp.route('/ea/login', methods=['GET', 'POST'])
 def ea_login():
     if request.method == 'POST':
-        users_table, _ = get_db()
-        User = Query()
+        supabase = get_db()
         
         email = request.form.get('email', '').strip()
         password = request.form.get('password')
         
-        user = users_table.search((User.email.matches(f"(?i)^{email}$")) & (User.user_type == 'EA'))
+        res = supabase.table('users').select('*').ilike('email', email).eq('user_type', 'EA').execute()
+        user = res.data[0] if res.data else None
         
-        if user and check_password_hash(user[0]['password_hash'], password):
-            session['user_id'] = user[0]['id']
+        if user and check_password_hash(user['password_hash'], password):
+            session['user_id'] = user['id']
             session['user_type'] = 'EA'
-            session['user_name'] = user[0]['full_name']
-            session['user_email'] = user[0]['email']
-            log_activity(user[0]['id'], 'EA', 'LOGIN', f"EA logged in: {email}")
+            session['user_name'] = user['full_name']
+            session['user_email'] = user['email']
+            log_activity(supabase, user['id'], 'EA', 'LOGIN', f"EA logged in: {email}")
             return redirect(url_for('ea.dashboard'))
         
         flash('Invalid email or password!', 'error')
@@ -146,19 +142,17 @@ def ea_login():
 @bp.route('/aef/signup', methods=['GET', 'POST'])
 def aef_signup():
     if request.method == 'POST':
-        users_table, _ = get_db()
-        User = Query()
+        supabase = get_db()
         
         email = request.form.get('email', '').strip().lower()
-        faculty_id = generate_faculty_id(users_table)
-        while users_table.search(User.faculty_id == faculty_id):
-            faculty_id = generate_faculty_id(users_table)
+        faculty_id = generate_faculty_id(supabase)
         
         if not email.endswith('@gmail.com'):
             flash('Only Gmail addresses (@gmail.com) are allowed for registration!', 'error')
             return redirect(url_for('auth.aef_signup'))
 
-        if users_table.search(User.email.matches(f"(?i)^{email}$")):
+        existing = supabase.table('users').select('id').ilike('email', email).execute()
+        if existing.data:
             flash('Email already exists!', 'error')
             return redirect(url_for('auth.aef_signup'))
         
@@ -186,34 +180,34 @@ def aef_signup():
             'is_authorized': False
         }
         
-        users_table.insert(user_data)
+        supabase.table('users').insert(user_data).execute()
         session.pop('registration_otp', None)
-        log_activity(user_data['id'], 'AEF', 'SIGNUP', f"New AEF registered: {email}")
+        log_activity(supabase, user_data['id'], 'AEF', 'SIGNUP', f"New AEF registered: {email}")
         flash('Registration successful! Please login. Note: You need authorization from an Administrator to access exam papers.', 'success')
         return redirect(url_for('auth.aef_login'))
     
-    users_table, _ = get_db()
-    faculty_id = generate_faculty_id(users_table)
+    supabase = get_db()
+    faculty_id = generate_faculty_id(supabase)
     return render_template('aef_signup.html', faculty_id=faculty_id)
 
 
 @bp.route('/aef/login', methods=['GET', 'POST'])
 def aef_login():
     if request.method == 'POST':
-        users_table, _ = get_db()
-        User = Query()
+        supabase = get_db()
         
         email = request.form.get('email', '').strip()
         password = request.form.get('password')
         
-        user = users_table.search((User.email.matches(f"(?i)^{email}$")) & (User.user_type == 'AEF'))
+        res = supabase.table('users').select('*').ilike('email', email).eq('user_type', 'AEF').execute()
+        user = res.data[0] if res.data else None
         
-        if user and check_password_hash(user[0]['password_hash'], password):
-            session['user_id'] = user[0]['id']
+        if user and check_password_hash(user['password_hash'], password):
+            session['user_id'] = user['id']
             session['user_type'] = 'AEF'
-            session['user_name'] = user[0]['full_name']
-            session['user_email'] = user[0]['email']
-            log_activity(user[0]['id'], 'AEF', 'LOGIN', f"AEF logged in: {email}")
+            session['user_name'] = user['full_name']
+            session['user_email'] = user['email']
+            log_activity(supabase, user['id'], 'AEF', 'LOGIN', f"AEF logged in: {email}")
             return redirect(url_for('aef.dashboard'))
         
         flash('Invalid email or password!', 'error')
@@ -223,10 +217,11 @@ def aef_login():
 
 @bp.route('/logout')
 def logout():
+    supabase = get_db()
     user_id = session.get('user_id')
     user_type = session.get('user_type')
     if user_id:
-        log_activity(user_id, user_type, 'LOGOUT', 'User logged out')
+        log_activity(supabase, user_id, user_type, 'LOGOUT', 'User logged out')
     session.clear()
     flash('You have been logged out successfully.', 'success')
     return redirect(url_for('auth.home'))
@@ -236,17 +231,14 @@ def logout():
 def forgot_password():
     if request.method == 'POST':
         email = request.form.get('email')
-        users_table, _ = get_db()
-        User = Query()
-        user = users_table.get(User.email == email)
+        supabase = get_db()
+        res = supabase.table('users').select('*').eq('email', email).execute()
+        user = res.data[0] if res.data else None
 
         if user:
             otp = ''.join(random.choices(string.digits, k=6))
             session['reset_otp'] = otp
             session['reset_email'] = email
-            
-            # In a real app, you'd email this OTP.
-            # For this project, we'll flash it for demonstration.
             flash('An OTP has been sent to your email.', 'info')
             return redirect(url_for('auth.reset_with_otp'))
         else:
@@ -264,21 +256,24 @@ def reset_with_otp():
         new_password = request.form.get('new_password')
         
         if otp == session.get('reset_otp'):
-            users_table, _ = get_db()
-            User = Query()
+            supabase = get_db()
+            email = session['reset_email']
             
-            users_table.update(
-                {'password_hash': generate_password_hash(new_password)},
-                User.email == session['reset_email']
-            )
+            # Get user id for logging
+            res = supabase.table('users').select('id').eq('email', email).execute()
+            user_id = res.data[0]['id'] if res.data else None
             
-            log_activity(users_table.get(User.email == session['reset_email'])['id'], 'USER', 'PASSWORD_RESET', f"Password reset for {session['reset_email']}")
+            supabase.table('users').update(
+                {'password_hash': generate_password_hash(new_password)}
+            ).eq('email', email).execute()
+            
+            if user_id:
+                log_activity(supabase, user_id, 'USER', 'PASSWORD_RESET', f"Password reset for {email}")
 
             session.pop('reset_otp', None)
             session.pop('reset_email', None)
             
             flash('Your password has been reset successfully. Please login.', 'success')
-            # Redirect to home or a generic login page, as we don't know if they are EA or AEF
             return redirect(url_for('auth.home'))
         else:
             flash('Invalid OTP.', 'error')

@@ -1,6 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, send_file
 from functools import wraps
-from tinydb import Query
 from datetime import datetime
 import uuid
 import os
@@ -11,8 +10,8 @@ from encryption import generate_rsa_key_pair, encrypt_file, encrypt_text, decryp
 bp = Blueprint('ea', __name__, url_prefix='/ea')
 
 def get_db():
-    from app import users_table, papers_table, keys_table, authorizations_table, logs_table
-    return users_table, papers_table, keys_table, authorizations_table, logs_table
+    from app import supabase
+    return supabase
 
 
 def ea_required(f):
@@ -25,16 +24,15 @@ def ea_required(f):
     return decorated_function
 
 
-def log_activity(user_id, action, details=""):
-    _, _, _, _, logs_table = get_db()
-    logs_table.insert({
+def log_activity(supabase, user_id, action, details=""):
+    supabase.table('access_logs').insert({
         'id': str(uuid.uuid4()),
         'user_id': user_id,
         'user_type': 'EA',
         'action': action,
         'details': details,
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
+    }).execute()
 
 
 def has_visible_content(value):
@@ -48,15 +46,20 @@ def has_visible_content(value):
 @bp.route('/dashboard')
 @ea_required
 def dashboard():
-    users_table, papers_table, keys_table, authorizations_table, logs_table = get_db()
-    User = Query()
+    supabase = get_db()
+    
+    papers_res = supabase.table('papers').select('id').execute()
+    aef_res = supabase.table('users').select('id').eq('user_type', 'AEF').execute()
+    auth_aef_res = supabase.table('users').select('id').eq('user_type', 'AEF').eq('is_authorized', True).execute()
+    keys_res = supabase.table('keys').select('id').execute()
+    logs_res = supabase.table('access_logs').select('*').order('timestamp', desc=True).limit(5).execute()
     
     stats = {
-        'total_papers': len(papers_table.all()),
-        'total_faculty': len(users_table.search(User.user_type == 'AEF')),
-        'authorized_faculty': len(users_table.search((User.user_type == 'AEF') & (User.is_authorized == True))),
-        'total_keys': len(keys_table.all()),
-        'recent_logs': logs_table.all()[-5:][::-1] if logs_table.all() else []
+        'total_papers': len(papers_res.data),
+        'total_faculty': len(aef_res.data),
+        'authorized_faculty': len(auth_aef_res.data),
+        'total_keys': len(keys_res.data),
+        'recent_logs': logs_res.data
     }
     
     return render_template('ea/dashboard.html', stats=stats)
@@ -65,10 +68,10 @@ def dashboard():
 @bp.route('/create-paper', methods=['GET', 'POST'])
 @ea_required
 def create_paper():
-    _, papers_table, keys_table, _, _ = get_db()
-    Key = Query()
+    supabase = get_db()
     
-    keys = keys_table.all()
+    keys_res = supabase.table('keys').select('*').execute()
+    keys = keys_res.data
     
     if request.method == 'POST':
         if not keys:
@@ -76,13 +79,14 @@ def create_paper():
             return redirect(url_for('ea.manage_keys'))
         
         selected_key_id = request.form.get('key_id')
-        selected_key = keys_table.search(Key.id == selected_key_id)
+        key_res = supabase.table('keys').select('*').eq('id', selected_key_id).execute()
         
-        if not selected_key:
+        if not key_res.data:
             flash('Selected RSA key not found. Please choose a valid key.', 'error')
             return redirect(url_for('ea.create_paper'))
         
-        public_key = selected_key[0]['public_key']
+        selected_key = key_res.data[0]
+        public_key = selected_key['public_key']
         
         exam_name = request.form.get('exam_name')
         subject = request.form.get('subject')
@@ -110,15 +114,15 @@ def create_paper():
             'encrypted_key': encrypted_key,
             'encrypted_instructions': encrypted_instructions,
             'instructions_key': instr_key,
-            'key_id': selected_key[0]['id'],
+            'key_id': selected_key['id'],
             'created_by': session['user_id'],
             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'status': 'encrypted',
             'is_active': True
         }
         
-        papers_table.insert(paper_data)
-        log_activity(session['user_id'], 'CREATE_PAPER', f"Created encrypted paper: {exam_name}")
+        supabase.table('papers').insert(paper_data).execute()
+        log_activity(supabase, session['user_id'], 'CREATE_PAPER', f"Created encrypted paper: {exam_name}")
         flash('Question paper created and encrypted successfully!', 'success')
         return redirect(url_for('ea.manage_papers'))
     
@@ -128,31 +132,29 @@ def create_paper():
 @bp.route('/manage-papers')
 @ea_required
 def manage_papers():
-    _, papers_table, _, _, _ = get_db()
-    papers = papers_table.all()
+    supabase = get_db()
+    papers = supabase.table('papers').select('*').execute().data
     return render_template('ea/manage_papers.html', papers=papers)
 
 
 @bp.route('/edit-paper/<paper_id>', methods=['GET', 'POST'])
 @ea_required
 def edit_paper(paper_id):
-    _, papers_table, keys_table, _, _ = get_db()
-    Paper = Query()
-    Key = Query()
+    supabase = get_db()
     
-    paper = papers_table.search(Paper.id == paper_id)
-    if not paper:
+    paper_res = supabase.table('papers').select('*').eq('id', paper_id).execute()
+    if not paper_res.data:
         flash('Paper not found!', 'error')
         return redirect(url_for('ea.manage_papers'))
     
-    paper = paper[0]
-    keys = keys_table.all()
+    paper = paper_res.data[0]
+    keys = supabase.table('keys').select('*').execute().data
     
     # Decrypt content for GET request
     if request.method == 'GET':
-        paper_key = keys_table.search(Key.id == paper['key_id'])
-        if paper_key:
-            private_key = paper_key[0]['private_key']
+        key_res = supabase.table('keys').select('*').eq('id', paper['key_id']).execute()
+        if key_res.data:
+            private_key = key_res.data[0]['private_key']
             try:
                 paper['decrypted_questions'] = decrypt_text(paper['encrypted_questions'], paper['encrypted_key'], private_key)
                 paper['decrypted_instructions'] = decrypt_text(paper['encrypted_instructions'], paper['instructions_key'], private_key)
@@ -161,12 +163,13 @@ def edit_paper(paper_id):
 
     if request.method == 'POST':
         selected_key_id = request.form.get('key_id')
-        selected_key = keys_table.search(Key.id == selected_key_id)
-        if not selected_key:
+        key_res = supabase.table('keys').select('*').eq('id', selected_key_id).execute()
+        if not key_res.data:
             flash('Selected RSA key not found.', 'error')
             return redirect(url_for('ea.edit_paper', paper_id=paper_id))
         
-        public_key = selected_key[0]['public_key']
+        selected_key = key_res.data[0]
+        public_key = selected_key['public_key']
         questions = request.form.get('questions')
         instructions = request.form.get('instructions')
 
@@ -177,7 +180,7 @@ def edit_paper(paper_id):
         encrypted_questions, encrypted_key = encrypt_text(questions, public_key)
         encrypted_instructions, instr_key = encrypt_text(instructions, public_key)
         
-        papers_table.update({
+        supabase.table('papers').update({
             'exam_name': request.form.get('exam_name'),
             'subject': request.form.get('subject'),
             'exam_date': request.form.get('exam_date'),
@@ -187,11 +190,11 @@ def edit_paper(paper_id):
             'encrypted_key': encrypted_key,
             'encrypted_instructions': encrypted_instructions,
             'instructions_key': instr_key,
-            'key_id': selected_key[0]['id'],
+            'key_id': selected_key['id'],
             'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }, Paper.id == paper_id)
+        }).eq('id', paper_id).execute()
         
-        log_activity(session['user_id'], 'EDIT_PAPER', f"Edited paper: {request.form.get('exam_name')}")
+        log_activity(supabase, session['user_id'], 'EDIT_PAPER', f"Edited paper: {request.form.get('exam_name')}")
         flash('Paper updated successfully!', 'success')
         return redirect(url_for('ea.manage_papers'))
     
@@ -201,15 +204,14 @@ def edit_paper(paper_id):
 @bp.route('/delete-paper/<paper_id>')
 @ea_required
 def delete_paper(paper_id):
-    _, papers_table, _, authorizations_table, _ = get_db()
-    Paper = Query()
-    Auth = Query()
+    supabase = get_db()
     
-    paper = papers_table.search(Paper.id == paper_id)
-    if paper:
-        papers_table.remove(Paper.id == paper_id)
-        authorizations_table.remove(Auth.paper_id == paper_id)
-        log_activity(session['user_id'], 'DELETE_PAPER', f"Deleted paper: {paper[0]['exam_name']}")
+    paper_res = supabase.table('papers').select('exam_name').eq('id', paper_id).execute()
+    if paper_res.data:
+        exam_name = paper_res.data[0]['exam_name']
+        supabase.table('papers').delete().eq('id', paper_id).execute()
+        supabase.table('authorizations').delete().eq('paper_id', paper_id).execute()
+        log_activity(supabase, session['user_id'], 'DELETE_PAPER', f"Deleted paper: {exam_name}")
         flash('Paper deleted successfully!', 'success')
     
     return redirect(url_for('ea.manage_papers'))
@@ -218,8 +220,7 @@ def delete_paper(paper_id):
 @bp.route('/manage-keys', methods=['GET', 'POST'])
 @ea_required
 def manage_keys():
-    _, _, keys_table, _, _ = get_db()
-    Key = Query()
+    supabase = get_db()
     
     if request.method == 'POST':
         action = request.form.get('action')
@@ -228,7 +229,8 @@ def manage_keys():
             key_name = request.form.get('key_name')
             private_key, public_key = generate_rsa_key_pair()
             
-            keys_table.update({'is_active': False}, Key.is_active == True)
+            # Deactivate all existing keys
+            supabase.table('keys').update({'is_active': False}).eq('is_active', True).execute()
             
             key_data = {
                 'id': str(uuid.uuid4()),
@@ -240,45 +242,44 @@ def manage_keys():
                 'is_active': True
             }
             
-            keys_table.insert(key_data)
-            log_activity(session['user_id'], 'GENERATE_KEY', f"Generated new RSA key pair: {key_name}")
+            supabase.table('keys').insert(key_data).execute()
+            log_activity(supabase, session['user_id'], 'GENERATE_KEY', f"Generated new RSA key pair: {key_name}")
             flash('New RSA key pair generated successfully!', 'success')
         
         elif action == 'activate':
             key_id = request.form.get('key_id')
-            keys_table.update({'is_active': False}, Key.is_active == True)
-            keys_table.update({'is_active': True}, Key.id == key_id)
-            log_activity(session['user_id'], 'ACTIVATE_KEY', f"Activated key: {key_id}")
+            supabase.table('keys').update({'is_active': False}).eq('is_active', True).execute()
+            supabase.table('keys').update({'is_active': True}).eq('id', key_id).execute()
+            log_activity(supabase, session['user_id'], 'ACTIVATE_KEY', f"Activated key: {key_id}")
             flash('Key activated successfully!', 'success')
         
         elif action == 'delete':
             key_id = request.form.get('key_id')
-            key = keys_table.search(Key.id == key_id)
-            if key and not key[0]['is_active']:
-                keys_table.remove(Key.id == key_id)
-                log_activity(session['user_id'], 'DELETE_KEY', f"Deleted key: {key_id}")
+            key_res = supabase.table('keys').select('*').eq('id', key_id).execute()
+            if key_res.data and not key_res.data[0]['is_active']:
+                supabase.table('keys').delete().eq('id', key_id).execute()
+                log_activity(supabase, session['user_id'], 'DELETE_KEY', f"Deleted key: {key_id}")
                 flash('Key deleted successfully!', 'success')
             else:
                 flash('Cannot delete active key!', 'error')
         
         return redirect(url_for('ea.manage_keys'))
     
-    keys = keys_table.all()
+    keys = supabase.table('keys').select('*').execute().data
     return render_template('ea/manage_keys.html', keys=keys)
 
 
 @bp.route('/download-key/<key_id>/<key_type>')
 @ea_required
 def download_key(key_id, key_type):
-    _, _, keys_table, _, _ = get_db()
-    Key = Query()
+    supabase = get_db()
     
-    key = keys_table.search(Key.id == key_id)
-    if not key:
+    key_res = supabase.table('keys').select('*').eq('id', key_id).execute()
+    if not key_res.data:
         flash('Key not found!', 'error')
         return redirect(url_for('ea.manage_keys'))
     
-    key = key[0]
+    key = key_res.data[0]
     
     if key_type == 'private':
         content = key['private_key']
@@ -291,16 +292,14 @@ def download_key(key_id, key_type):
     with open(temp_path, 'w') as f:
         f.write(content)
     
-    log_activity(session['user_id'], 'DOWNLOAD_KEY', f"Downloaded {key_type} key: {key['key_name']}")
+    log_activity(supabase, session['user_id'], 'DOWNLOAD_KEY', f"Downloaded {key_type} key: {key['key_name']}")
     return send_file(temp_path, as_attachment=True, download_name=filename)
 
 
 @bp.route('/authorize-faculty', methods=['GET', 'POST'])
 @ea_required
 def authorize_faculty():
-    users_table, papers_table, _, authorizations_table, _ = get_db()
-    User = Query()
-    Auth = Query()
+    supabase = get_db()
     
     if request.method == 'POST':
         action = request.form.get('action')
@@ -309,11 +308,11 @@ def authorize_faculty():
             faculty_id = request.form.get('faculty_id')
             paper_ids = request.form.getlist('paper_ids')
             
-            faculty = users_table.search(User.id == faculty_id)
-            if faculty:
-                users_table.update({'is_authorized': True}, User.id == faculty_id)
-                
-                authorizations_table.remove((Auth.faculty_id == faculty_id))
+            faculty_res = supabase.table('users').select('*').eq('id', faculty_id).execute()
+            if faculty_res.data:
+                faculty = faculty_res.data[0]
+                supabase.table('users').update({'is_authorized': True}).eq('id', faculty_id).execute()
+                supabase.table('authorizations').delete().eq('faculty_id', faculty_id).execute()
                 
                 for paper_id in paper_ids:
                     auth_data = {
@@ -324,32 +323,32 @@ def authorize_faculty():
                         'authorized_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         'is_active': True
                     }
-                    authorizations_table.insert(auth_data)
+                    supabase.table('authorizations').insert(auth_data).execute()
                 
-                log_activity(session['user_id'], 'AUTHORIZE_FACULTY', 
-                           f"Authorized faculty {faculty[0]['full_name']} for {len(paper_ids)} papers")
-                flash(f"Faculty {faculty[0]['full_name']} authorized successfully for {len(paper_ids)} exam papers!", 'success')
+                log_activity(supabase, session['user_id'], 'AUTHORIZE_FACULTY',
+                           f"Authorized faculty {faculty['full_name']} for {len(paper_ids)} papers")
+                flash(f"Faculty {faculty['full_name']} authorized successfully for {len(paper_ids)} exam papers!", 'success')
         
         elif action == 'revoke':
             faculty_id = request.form.get('faculty_id')
-            faculty = users_table.search(User.id == faculty_id)
-            if faculty:
-                users_table.update({'is_authorized': False}, User.id == faculty_id)
-                authorizations_table.remove(Auth.faculty_id == faculty_id)
-                log_activity(session['user_id'], 'REVOKE_AUTHORIZATION', 
-                           f"Revoked authorization for faculty {faculty[0]['full_name']}")
-                flash(f"Authorization revoked for {faculty[0]['full_name']}!", 'success')
+            faculty_res = supabase.table('users').select('*').eq('id', faculty_id).execute()
+            if faculty_res.data:
+                faculty = faculty_res.data[0]
+                supabase.table('users').update({'is_authorized': False}).eq('id', faculty_id).execute()
+                supabase.table('authorizations').delete().eq('faculty_id', faculty_id).execute()
+                log_activity(supabase, session['user_id'], 'REVOKE_AUTHORIZATION',
+                           f"Revoked authorization for faculty {faculty['full_name']}")
+                flash(f"Authorization revoked for {faculty['full_name']}!", 'success')
         
         return redirect(url_for('ea.authorize_faculty'))
     
-    faculty_list = users_table.search(User.user_type == 'AEF')
-    papers = papers_table.all()
+    faculty_list = supabase.table('users').select('*').eq('user_type', 'AEF').execute().data
+    papers = supabase.table('papers').select('*').execute().data
     
     faculty_with_auth = []
     for faculty in faculty_list:
-        auth = authorizations_table.search(Auth.faculty_id == faculty['id'])
-        authorized_papers = [a['paper_id'] for a in auth]
-        faculty['authorized_papers'] = authorized_papers
+        auth_res = supabase.table('authorizations').select('paper_id').eq('faculty_id', faculty['id']).execute()
+        faculty['authorized_papers'] = [a['paper_id'] for a in auth_res.data]
         faculty_with_auth.append(faculty)
     
     return render_template('ea/authorize_faculty.html', faculty_list=faculty_with_auth, papers=papers)
@@ -358,15 +357,11 @@ def authorize_faculty():
 @bp.route('/access-logs')
 @ea_required
 def access_logs():
-    users_table, _, _, _, logs_table = get_db()
-    User = Query()
+    supabase = get_db()
     
-    logs = logs_table.all()
-    logs = sorted(logs, key=lambda x: x['timestamp'], reverse=True)
-    
-    user_map = {}
-    for user in users_table.all():
-        user_map[user['id']] = user['full_name']
+    logs = supabase.table('access_logs').select('*').order('timestamp', desc=True).execute().data
+    users_res = supabase.table('users').select('id, full_name').execute()
+    user_map = {u['id']: u['full_name'] for u in users_res.data}
     
     for log in logs:
         log['user_name'] = user_map.get(log['user_id'], 'Unknown User')
@@ -377,24 +372,21 @@ def access_logs():
 @bp.route('/view-paper/<paper_id>')
 @ea_required
 def view_paper(paper_id):
-    _, papers_table, keys_table, _, _ = get_db()
-    Paper = Query()
-    Key = Query()
+    supabase = get_db()
 
-    paper = papers_table.search(Paper.id == paper_id)
-    if not paper:
+    paper_res = supabase.table('papers').select('*').eq('id', paper_id).execute()
+    if not paper_res.data:
         flash('Paper not found!', 'error')
         return redirect(url_for('ea.manage_papers'))
     
-    paper = paper[0]
+    paper = paper_res.data[0]
     
-    # Find the key used for this paper
-    paper_key = keys_table.search(Key.id == paper['key_id'])
-    if not paper_key:
+    key_res = supabase.table('keys').select('*').eq('id', paper['key_id']).execute()
+    if not key_res.data:
         flash('Encryption key for this paper not found!', 'error')
         return redirect(url_for('ea.manage_papers'))
         
-    private_key = paper_key[0]['private_key']
+    private_key = key_res.data[0]['private_key']
     
     try:
         decrypted_questions = decrypt_text(paper['encrypted_questions'], paper['encrypted_key'], private_key)
@@ -407,6 +399,6 @@ def view_paper(paper_id):
     paper['decrypted_questions'] = decrypted_questions
     paper['decrypted_instructions'] = decrypted_instructions
     
-    log_activity(session['user_id'], 'VIEW_PAPER', f"Viewed paper: {paper['exam_name']}")
+    log_activity(supabase, session['user_id'], 'VIEW_PAPER', f"Viewed paper: {paper['exam_name']}")
     
     return render_template('ea/view_paper.html', paper=paper)

@@ -10,6 +10,10 @@ env/
 # Local runtime and secrets
 keys/
 uploads/
+.env
+
+# Node.js dependencies
+node_modules/
 
 # OS/editor files
 .DS_Store
