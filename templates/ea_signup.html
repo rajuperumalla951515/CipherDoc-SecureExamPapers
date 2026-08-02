@@ -401,8 +401,8 @@
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 <script type="text/javascript">
     (function() {
-        // Initialize EmailJS with your public key
-        emailjs.init("Ce6ayqlmo8AS-ycc5"); 
+        // Initialize EmailJS with public key
+        emailjs.init("Ce6ayqlmo8AS-ycc5");
     })();
 
     let generatedOTP = null;
@@ -488,7 +488,7 @@
 
                 console.log('Sending OTP via EmailJS with params:', templateParams);
 
-                emailjs.send('service_8sgcmq4', 'template_0ku8pxj', templateParams)
+                emailjs.send('service_8sgcmq4', 'template_ef3hvgc', templateParams, 'Ce6ayqlmo8AS-ycc5')
                     .then(function(response) {
                         alert('OTP sent successfully to your email!');
                         document.getElementById('otp-section').style.display = 'block';
