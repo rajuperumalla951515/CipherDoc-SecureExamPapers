@@ -73,6 +73,10 @@ def create_paper():
     keys_res = supabase.table('keys').select('*').execute()
     keys = keys_res.data
     
+    if not keys:
+        flash('No RSA keys found! Please create an RSA key first before creating a question paper.', 'warning')
+        return redirect(url_for('ea.manage_keys'))
+    
     if request.method == 'POST':
         if not keys:
             flash('Please generate RSA keys first before creating encrypted papers!', 'error')
