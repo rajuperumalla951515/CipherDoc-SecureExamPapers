@@ -14,15 +14,15 @@
                 CipherDoc Admin
             </a>
         </div>
-        <div class="navbar-nav ms-auto d-flex flex-row align-items-center gap-3">
-            <button class="theme-toggle-btn me-2" onclick="toggleTheme()" title="Toggle Theme">
+        <div class="navbar-nav ms-auto d-flex flex-row align-items-center gap-2 gap-md-3">
+            <button class="theme-toggle-btn me-1 me-md-2" onclick="toggleTheme()" title="Toggle Theme">
                 <i class="fas fa-sun theme-icon"></i>
             </button>
-            <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#profileModal" style="cursor: pointer;">
-                <i class="fas fa-user-circle me-1 text-primary"></i>{{ session.user_name }}
+            <a class="nav-link d-flex align-items-center" href="#" data-bs-toggle="modal" data-bs-target="#profileModal" style="cursor: pointer;" title="Profile">
+                <i class="fas fa-user-circle me-1 text-primary"></i><span class="d-none d-sm-inline">{{ session.user_name }}</span>
             </a>
-            <a class="nav-link" href="{{ url_for('auth.logout') }}">
-                <i class="fas fa-sign-out-alt me-1"></i>Logout
+            <a class="nav-link btn btn-sm btn-outline-danger border-0 px-2 py-1" href="{{ url_for('auth.logout') }}" title="Logout">
+                <i class="fas fa-sign-out-alt me-1"></i><span class="d-none d-sm-inline">Logout</span>
             </a>
         </div>
     </div>
