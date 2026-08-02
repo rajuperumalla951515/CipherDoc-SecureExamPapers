@@ -1128,6 +1128,93 @@
             .row > .col-lg-7.d-none.d-lg-flex {
                 display: none !important;
             }
+
+            /* Responsive Dashboard & Sidebar Fixes for Mobile */
+            .sidebar {
+                position: fixed;
+                top: 60px;
+                left: -260px;
+                height: calc(100vh - 60px);
+                z-index: 1050;
+                transition: left 0.3s ease;
+                width: 260px !important;
+                background: var(--bg-card) !important;
+                box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+            }
+
+            .sidebar.active,
+            .sidebar:not(.collapsed) {
+                left: 0;
+            }
+
+            .sidebar.collapsed {
+                left: -260px;
+                width: 260px !important;
+            }
+
+            .main-content-wrapper {
+                width: 100% !important;
+                padding: 15px !important;
+                margin-left: 0 !important;
+            }
+
+            .sidebar.collapsed + .main-content-wrapper {
+                width: 100% !important;
+            }
+
+            /* Mobile Header & Logo Adjustments */
+            .navbar-custom {
+                padding: 8px 12px !important;
+            }
+
+            .navbar-logo {
+                height: 24px !important;
+                margin-right: 6px !important;
+            }
+
+            .navbar-custom .navbar-brand {
+                font-size: 1.05rem !important;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 180px;
+            }
+
+            .navbar-nav {
+                gap: 8px !important;
+            }
+
+            .navbar-nav .nav-link {
+                padding: 4px 8px !important;
+                font-size: 0.85rem !important;
+            }
+
+            /* Profile Modal Mobile Layout Fixes */
+            .profile-avatar-wrapper {
+                border-right: none !important;
+                border-bottom: 1px solid var(--glass-border);
+                padding: 1.5rem 1rem !important;
+            }
+
+            .profile-avatar-large {
+                width: 70px !important;
+                height: 70px !important;
+                font-size: 1.8rem !important;
+                margin-bottom: 0.5rem !important;
+            }
+
+            .profile-info-grid {
+                grid-template-columns: 1fr !important;
+                gap: 0.8rem !important;
+            }
+
+            .glass-modal .modal-body {
+                padding: 1rem !important;
+            }
+
+            #profileContent {
+                padding: 1.25rem !important;
+            }
         }
     </style>
 </head>
