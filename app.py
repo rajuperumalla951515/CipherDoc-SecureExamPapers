@@ -57,15 +57,18 @@ def check_config():
     if supabase is None:
         if request.endpoint == 'static' or request.path.startswith('/static/'):
             return
-        return render_template('config_error.html'), 503
+        return render_template('config_error.html'), 200
 
 @app.context_processor
 def inject_user():
     user_id = session.get('user_id')
     if user_id and supabase:
-        res = supabase.table('users').select('*').eq('id', user_id).execute()
-        if res.data:
-            return dict(current_user=res.data[0])
+        try:
+            res = supabase.table('users').select('*').eq('id', user_id).execute()
+            if res.data:
+                return dict(current_user=res.data[0])
+        except Exception as e:
+            logging.error(f"Error querying user in context processor: {e}")
     return dict(current_user=None)
 
 @app.route('/update-profile', methods=['POST'])
