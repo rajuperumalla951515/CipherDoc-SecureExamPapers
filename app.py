@@ -16,14 +16,30 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 app_root = os.path.dirname(os.path.abspath(__file__))
 uploads_path = os.path.join(app_root, 'uploads')
 keys_path = os.path.join(app_root, 'keys')
-os.makedirs(uploads_path, exist_ok=True)
-os.makedirs(keys_path, exist_ok=True)
 
-# Supabase client
-supabase: Client = create_client(
-    os.environ.get('SUPABASE_URL'),
-    os.environ.get('SUPABASE_KEY')
-)
+try:
+    os.makedirs(uploads_path, exist_ok=True)
+    os.makedirs(keys_path, exist_ok=True)
+except OSError:
+    # Read-only filesystem fallback (e.g. Vercel deployment)
+    uploads_path = '/tmp/uploads'
+    keys_path = '/tmp/keys'
+    os.makedirs(uploads_path, exist_ok=True)
+    os.makedirs(keys_path, exist_ok=True)
+
+# Supabase client initialization
+supabase_url = os.environ.get('SUPABASE_URL')
+supabase_key = os.environ.get('SUPABASE_KEY')
+
+if not supabase_url or not supabase_key:
+    # Set to None to prevent fatal startup crash on initial build/deploy
+    supabase = None
+else:
+    try:
+        supabase: Client = create_client(supabase_url, supabase_key)
+    except Exception as e:
+        logging.error(f"Failed to initialize Supabase client: {e}")
+        supabase = None
 
 app.config['UPLOAD_FOLDER'] = uploads_path
 app.config['KEYS_FOLDER'] = keys_path
@@ -34,11 +50,19 @@ app.register_blueprint(auth.bp)
 app.register_blueprint(ea.bp)
 app.register_blueprint(aef.bp)
 
-from flask import session
+from flask import session, render_template
+
+@app.before_request
+def check_config():
+    if supabase is None:
+        if request.endpoint == 'static' or request.path.startswith('/static/'):
+            return
+        return render_template('config_error.html'), 503
+
 @app.context_processor
 def inject_user():
     user_id = session.get('user_id')
-    if user_id:
+    if user_id and supabase:
         res = supabase.table('users').select('*').eq('id', user_id).execute()
         if res.data:
             return dict(current_user=res.data[0])

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration Required - Secure Exam System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #03030f;
+            --bg-card: rgba(12, 12, 28, 0.7);
+            --primary: #8a2be2;
+            --accent: #4cc9f0;
+            --text-main: #ffffff;
+            --text-muted: #a0aec0;
+            --border-glow: rgba(138, 43, 226, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --accent-gradient: linear-gradient(135deg, #8a2be2 0%, #4361ee 50%, #4cc9f0 100%);
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow-x: hidden;
+            margin: 0;
+        }
+
+        /* Abstract dynamic mesh background glows */
+        body::before {
+            content: '';
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(138, 43, 226, 0.25) 0%, transparent 70%);
+            top: 15%;
+            left: 10%;
+            z-index: -1;
+            filter: blur(50px);
+            animation: pulse 12s infinite alternate;
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(76, 201, 240, 0.15) 0%, transparent 70%);
+            bottom: 15%;
+            right: 5%;
+            z-index: -1;
+            filter: blur(60px);
+            animation: pulse 15s infinite alternate-reverse;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1) translate(0, 0); }
+            100% { transform: scale(1.2) translate(30px, -20px); }
+        }
+
+        .config-card {
+            background: var(--bg-card);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 40px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 40px var(--border-glow);
+            max-width: 650px;
+            width: 100%;
+            margin: 20px;
+            transition: transform 0.3s ease;
+        }
+
+        .icon-shield {
+            font-size: 3rem;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+            animation: float 4s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        h1 {
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff 0%, #cbd5e0 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 15px;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+        }
+
+        .env-var-badge {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--accent);
+            display: inline-block;
+            margin: 5px;
+        }
+
+        .instructions-list {
+            text-align: left;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 30px;
+        }
+
+        .instruction-item {
+            display: flex;
+            margin-bottom: 15px;
+        }
+
+        .instruction-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .instruction-num {
+            background: var(--accent-gradient);
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+
+        .instruction-text {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .instruction-text strong {
+            color: var(--text-main);
+        }
+
+        .action-button {
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 12px;
+            padding: 12px 30px;
+            color: #ffffff;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(138, 43, 226, 0.6);
+            opacity: 0.95;
+        }
+    </style>
+</head>
+<body>
+    <div class="container d-flex justify-content-center">
+        <div class="config-card text-center">
+            <div class="icon-shield">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h1>Database Configuration Required</h1>
+            <p class="subtitle">Secure Exam System is almost ready! To start managing question papers securely, we need access to your Supabase instance.</p>
+            
+            <div class="mb-4">
+                <div class="env-var-badge">SUPABASE_URL</div>
+                <div class="env-var-badge">SUPABASE_KEY</div>
+            </div>
+
+            <div class="instructions-list">
+                <h5 class="mb-3 text-start"><i class="fa-solid fa-gear me-2 text-primary"></i>How to Configure (Vercel):</h5>
+                
+                <div class="instruction-item">
+                    <div class="instruction-num">1</div>
+                    <div class="instruction-text">
+                        Go to your project's dashboard on <strong>Vercel</strong>.
+                    </div>
+                </div>
+                <div class="instruction-item">
+                    <div class="instruction-num">2</div>
+                    <div class="instruction-text">
+                        Navigate to <strong>Settings</strong> &gt; <strong>Environment Variables</strong>.
+                    </div>
+                </div>
+                <div class="instruction-item">
+                    <div class="instruction-num">3</div>
+                    <div class="instruction-text">
+                        Add the environment variables listed above with their respective values from your <strong>Supabase Dashboard API Settings</strong>.
+                    </div>
+                </div>
+                <div class="instruction-item">
+                    <div class="instruction-num">4</div>
+                    <div class="instruction-text">
+                        <strong>Redeploy</strong> your project on Vercel to apply the settings.
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-muted small mb-4">
+                <i class="fa-solid fa-circle-info me-1"></i> Locally, you can set these variables in a <code>.env</code> file in the project root.
+            </p>
+
+            <button onclick="window.location.reload();" class="action-button">
+                <i class="fa-solid fa-rotate me-2"></i>Check Configuration Status
+            </button>
+        </div>
+    </div>
+</body>
+</html>
